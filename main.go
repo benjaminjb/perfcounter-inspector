@@ -12,16 +12,16 @@ import (
 )
 
 func main() {
-	obj := kingpin.Arg("object", "Which Performance Counter to inspect").Required().String()
+	counter := kingpin.Arg("object", "Which Performance Counter to inspect").Required().String()
 	kingpin.Parse()
 
 	nametable := perflib.QueryNameTable("Counter 009") // English
-	index := strconv.Itoa(int(nametable.LookupIndex(*obj)))
+	index := strconv.Itoa(int(nametable.LookupIndex(*counter)))
 	if index == "0" {
-		fmt.Printf("Counter %q not found\n", *obj)
+		fmt.Printf("Counter %q not found\n", *counter)
 		os.Exit(1)
 	}
-	fmt.Printf("Querying for %s (counter index %s)\n", *obj, index)
+	fmt.Printf("Querying for %s (counter index %s)\n", *counter, index)
 
 	t := time.Now()
 	objects, err := perflib.QueryPerformanceData(index)
@@ -35,13 +35,28 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("Query took %v\n", d)
-	po := objects[0]
-	fmt.Printf("Found %d objects, with %d instances on first object\n", len(objects), len(po.Instances))
 
-	fmt.Printf("First instance of first object: %s\n", po.Instances[0].Name)
+	var obj *perflib.PerfObject
+	for _, o := range objects {
+		if o.Name == *counter {
+			obj = o
+			break
+		}
+	}
+	if obj == nil {
+		fmt.Printf("Counter %q was not returned by query\n", *counter)
+		os.Exit(1)
+	}
+	if len(obj.Instances) == 0 {
+		fmt.Printf("No instances of %q found\n", *counter)
+		os.Exit(1)
+	}
+	i := obj.Instances[0]
+
+	fmt.Printf("First instance (of %d): %s\n", len(obj.Instances), i.Name)
 	w := tablewriter.NewWriter(os.Stdout)
 	w.SetHeader([]string{"Name", "Value", "Type"})
-	for _, c := range po.Instances[0].Counters {
+	for _, c := range i.Counters {
 		w.Append([]string{c.Def.Name, strconv.Itoa(int(c.Value)), typeNameMapping[c.Def.CounterType]})
 	}
 	w.Render()
